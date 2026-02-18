@@ -2,7 +2,7 @@
   "mcpServers": {
     "social-local": {
       "type": "sse",
-      "url": "http://localhost:3456/sse"
+      "url": "https://mcp.vegasops.com/sse"
     }
   }
 }
