@@ -1,7 +1,7 @@
 {
   "name": "social",
-  "version": "1.0.0",
-  "description": "Cross-post between X and Threads with automatic tone adaptation. Read posts from either platform and publish to both with platform-optimized formatting.",
+  "version": "2.0.0",
+  "description": "Read X feeds + trends. Draft and post to Threads in Alan's voice (@blk3yx). Commands: /social:scan-x /social:trend-watch /social:draft-threads /social:crosspost /social:post /social:feed",
   "author": {
     "name": "VegasOps / Sol"
   }

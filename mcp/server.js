@@ -166,6 +166,123 @@ server.tool("threads_inbox",
   }
 );
 
+// X: user timeline
+server.tool("x_user_timeline",
+  {
+    username: z.string().describe("X username without @"),
+    count: z.number().optional().describe("Number of tweets, default 10")
+  },
+  async ({ username, count = 10 }) => {
+    const creds = readJson(X_CREDS);
+    const userRes = await fetch(
+      `https://api.x.com/2/users/by/username/${username}`,
+      { headers: { Authorization: `Bearer ${creds.bearer_token}` } }
+    );
+    const userData = await userRes.json();
+    const userId = userData.data?.id;
+    if (!userId) {
+      throw new Error(`User @${username} not found`);
+    }
+
+    const res = await fetch(
+      `https://api.x.com/2/users/${userId}/tweets?max_results=${Math.min(count,100)}&tweet.fields=text,created_at,public_metrics`,
+      { headers: { Authorization: `Bearer ${creds.bearer_token}` } }
+    );
+    const data = await res.json();
+    return { content: [{ type: "text", text: JSON.stringify(data.data || data, null, 2) }] };
+  }
+);
+
+// X: recent search
+server.tool("x_search_recent",
+  {
+    query: z.string().describe("Search query"),
+    count: z.number().optional().describe("Number of results, default 20")
+  },
+  async ({ query, count = 20 }) => {
+    const creds = readJson(X_CREDS);
+    const q = encodeURIComponent(`${query} -is:retweet lang:en`);
+    const res = await fetch(
+      `https://api.x.com/2/tweets/search/recent?query=${q}&max_results=${Math.min(count,100)}&tweet.fields=text,created_at,author_id,public_metrics`,
+      { headers: { Authorization: `Bearer ${creds.bearer_token}` } }
+    );
+    const data = await res.json();
+    return { content: [{ type: "text", text: JSON.stringify(data.data || data, null, 2) }] };
+  }
+);
+
+// X: get replies by conversation
+server.tool("x_get_replies",
+  {
+    tweet_id: z.string().describe("Tweet ID to get replies for"),
+    count: z.number().optional()
+  },
+  async ({ tweet_id, count = 20 }) => {
+    const creds = readJson(X_CREDS);
+    const q = encodeURIComponent(`conversation_id:${tweet_id} -is:retweet`);
+    const res = await fetch(
+      `https://api.x.com/2/tweets/search/recent?query=${q}&max_results=${Math.min(count,100)}&tweet.fields=text,created_at,author_id,public_metrics`,
+      { headers: { Authorization: `Bearer ${creds.bearer_token}` } }
+    );
+    const data = await res.json();
+    return { content: [{ type: "text", text: JSON.stringify(data.data || [], null, 2) }] };
+  }
+);
+
+// X: watchlist scan
+server.tool("x_watchlist_scan",
+  {
+    usernames: z.array(z.string()).optional().describe("List of usernames, uses default watchlist if empty"),
+    count: z.number().optional()
+  },
+  async ({ usernames, count = 5 }) => {
+    const DEFAULT_WATCHLIST = ["sama","mosseri","hormozi","steipete","bcherny","embirico","AnthropicAI","OpenAI","openclaw","ClaudeCodeLog","trq212"];
+      const list = (Array.isArray(usernames) && usernames.length > 0) ? usernames : DEFAULT_WATCHLIST;
+    const creds = readJson(X_CREDS);
+    const results = [];
+
+    for (const username of list.slice(0, 8)) {
+      try {
+        const userRes = await fetch(
+          `https://api.x.com/2/users/by/username/${username}`,
+          { headers: { Authorization: `Bearer ${creds.bearer_token}` } }
+        );
+        const userData = await userRes.json();
+        const userId = userData.data?.id;
+        if (!userId) {
+          continue;
+        }
+
+        const tweetsRes = await fetch(
+          `https://api.x.com/2/users/${userId}/tweets?max_results=${count}&tweet.fields=text,created_at,public_metrics`,
+          { headers: { Authorization: `Bearer ${creds.bearer_token}` } }
+        );
+        const tweetsData = await tweetsRes.json();
+        results.push({ username, tweets: tweetsData.data || [] });
+      } catch (error) {
+        results.push({ username, error: error.message });
+      }
+    }
+
+    return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
+  }
+);
+
+// X: news search
+server.tool("x_news_search",
+  { query: z.string().describe("Topic to search Grok-curated news for") },
+  async ({ query }) => {
+    const creds = readJson(X_CREDS);
+    const q = encodeURIComponent(query);
+    const res = await fetch(
+      `https://api.x.com/2/news/search?query=${q}`,
+      { headers: { Authorization: `Bearer ${creds.bearer_token}` } }
+    );
+    const data = await res.json();
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  }
+);
+
 // Start HTTP server with SSE transport
 const transports = {};
 
@@ -184,7 +301,23 @@ const httpServer = http.createServer(async (req, res) => {
       res.writeHead(404).end("Session not found");
     }
   } else if (req.url === "/health") {
-    res.writeHead(200).end(JSON.stringify({ status: "ok", tools: ["x_read_feed","x_read_post","x_post","threads_post","threads_read_feed","threads_reply","threads_inbox"] }));
+    res.writeHead(200).end(JSON.stringify({
+      status: "ok",
+      tools: [
+        "x_read_feed",
+        "x_read_post",
+        "x_post",
+        "threads_post",
+        "threads_read_feed",
+        "threads_reply",
+        "threads_inbox",
+        "x_user_timeline",
+        "x_search_recent",
+        "x_get_replies",
+        "x_watchlist_scan",
+        "x_news_search"
+      ]
+    }));
   } else {
     res.writeHead(404).end("Not found");
   }
